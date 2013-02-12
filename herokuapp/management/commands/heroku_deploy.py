@@ -3,14 +3,14 @@ from __future__ import absolute_import
 import subprocess
 from optparse import make_option
 
-from django.core.management.base import NoArgsCommand, BaseCommand
+from django.core.management.base import BaseCommand
 from django.core.management import call_command
 
 from herokuapp import commands
 
 
-class Command(NoArgsCommand):
-    
+class Command(BaseCommand):
+    args = '<remote,remote,... local_branch>'
     help = "Deploys this app to the Heroku platform."
     
     option_list = BaseCommand.option_list + (
@@ -34,25 +34,35 @@ class Command(NoArgsCommand):
         ),
     )
     
-    def handle(self, **kwargs):
+    def handle(self, *args, **kwargs):
+        app_name = args[0]
+
         # Deploy static asssets.
         if kwargs["deploy_staticfiles"]:
             self.stdout.write("Deploying static files...\n")
             call_command("collectstatic", interactive=False)
         # Enter maintenance mode, if required.
         if kwargs["deploy_database"]:
-            commands.call("maintenance:on", _sub_shell=True)
+            commands.call("maintenance:on", "-a", app_name, _sub_shell=True)
         # Deploy app code.
         if kwargs["deploy_app"]:
             self.stdout.write("Pushing latest version of app to Heroku...\n")
-            subprocess.call(("git", "push", "heroku", "master",))
+
+            remotes = args[1].split(',')
+            local_branch = args[2]
+
+            subprocess.call(("git", "push", "origin", local_branch,))
+
+            remote_push_to = "{0}:master".format(local_branch)
+            for remote in remotes:
+                subprocess.call(("git", "push", remote, remote_push_to,))
         # Deploy migrations.
         if kwargs["deploy_database"]:
             self.stdout.write("Deploying database...\n")
-            commands.call("run", "python", "manage.py", "syncdb", _sub_shell=True)
-            commands.call("run", "python", "manage.py", "migrate", _sub_shell=True)
+            commands.call("run", "python", "UniShared_python/manage.py", "syncdb", "-a", app_name, _sub_shell=True)
+            commands.call("run", "python", "UniShared_python/manage.py", "migrate", "-a", app_name, _sub_shell=True)
         if (kwargs["deploy_staticfiles"] and not kwargs["deploy_app"]) or kwargs["deploy_database"]:
-            commands.call("restart", _sub_shell=True)
+            commands.call("restart", "-a", app_name, _sub_shell=True)
         # Exit maintenance mode, if required.
         if kwargs["deploy_database"]:
-            commands.call("maintenance:off", _sub_shell=True)
+            commands.call("maintenance:off", "-a", app_name, _sub_shell=True)
