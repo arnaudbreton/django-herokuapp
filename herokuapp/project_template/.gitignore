@@ -12,3 +12,5 @@ build
 MANIFEST
 venv
 .env
+*.iml
+.idea/
